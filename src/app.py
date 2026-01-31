@@ -5,39 +5,46 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Basic Page Configuration
-st.set_page_config(page_title="AI Expense Detective", layout="wide")
+# 1. Basic Page Configuration
+st.set_page_config(page_title="AI Expense Detective Pro", layout="wide")
+
+# Custom CSS to make metrics look like 'Cards'
+st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] {
+        font-size: 28px;
+        color: #00d4ff;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("🔍 AI-Powered Expense Anomaly Detector")
 st.markdown("Upload your spending CSV to find 'Wants', 'Needs', and 'Anomalies' automatically.")
 
 # --- SIDEBAR: UPLOAD DATA ---
+st.sidebar.header("Setup")
 uploaded_file = st.sidebar.file_uploader("Upload your expense CSV", type=["csv"])
 
 if uploaded_file is not None:
-    # 1. Load the Data
+    # 2. Load the Data
     df = pd.read_csv(uploaded_file)
     
-    # 2. Preprocessing Logic
-    # We convert categories to numbers because AI doesn't read text
+    # 3. Preprocessing Logic
     le = LabelEncoder()
     df_proc = df.copy()
     df_proc['Category_Enc'] = le.fit_transform(df['Category'])
-    
-    # Convert dates to a numerical format the model can process
     df_proc['Date_Ord'] = pd.to_datetime(df['Date']).apply(lambda x: x.toordinal())
     
-    # Scale the features so the AI treats 'Amount' and 'Date' fairly
+    # Scaling Features
     features = ['Date_Ord', 'Category_Enc', 'Amount']
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df_proc[features])
     
-    # 3. AI Model (Isolation Forest)
-    # Contamination=0.05 means we expect roughly 5% of data to be "weird"
+    # 4. AI Model (Isolation Forest)
     model = IsolationForest(contamination=0.05, random_state=42)
     df['Anomaly_Score'] = model.fit_predict(X_scaled)
     
-    # 4. Human-Readable Categorization
+    # Human-Readable Categorization
     def quick_cat(row):
         if row['Anomaly_Score'] == -1: 
             return 'Waste/Anomaly'
@@ -47,40 +54,68 @@ if uploaded_file is not None:
     
     df['Status'] = df.apply(quick_cat, axis=1)
 
-    # 5. Dashboard Metrics (Top Row)
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Spending", f"${df['Amount'].sum():,.2f}")
-    col2.metric("Anomalies Found", len(df[df['Anomaly_Score'] == -1]))
-    col3.metric("Top Category", df['Category'].mode()[0])
+    # 5. Dashboard Metrics (Cards at the top)
+    # Using a container with border for the metrics row
+    with st.container(border=True):
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Spending", f"${df['Amount'].sum():,.2f}")
+        col2.metric("Anomalies Found", len(df[df['Anomaly_Score'] == -1]))
+        col3.metric("Top Category", df['Category'].mode()[0])
 
-    # 6. Visualizations
-    st.subheader("Financial Insights")
-    fig, ax = plt.subplots(1, 2, figsize=(15, 6))
+    st.divider()
+
+    # 6. Visualizations (Organized into Two Columns with Cards)
+    st.subheader("📊 Financial Intelligence Dashboard")
     
-    # Scatter Plot: Visualizing Anomalies over Time
-    sns.scatterplot(data=df, x='Date', y='Amount', hue='Status', palette='magma', ax=ax[0])
-    ax[0].set_title("Spending Patterns & Anomalies")
-    plt.setp(ax[0].get_xticklabels(), rotation=45)
+    col_left, col_right = st.columns(2)
 
-    # Pie Chart: Budget Distribution
-    budget_dist = df.groupby('Status')['Amount'].sum()
-    ax[1].pie(budget_dist, labels=budget_dist.index, autopct='%1.1f%%', startangle=140, colors=['#ff9999','#66b3ff','#99ff99'])
-    ax[1].set_title("Budget Breakdown")
+    # Custom Professional Color Palette
+    custom_colors = {"Needs": "#00d4ff", "Wants/Essentials": "#9b59b6", "Waste/Anomaly": "#e74c3c"}
 
-    st.pyplot(fig)
+    with col_left:
+        with st.container(border=True):
+            st.markdown("### 📈 Spending Patterns")
+            fig1, ax1 = plt.subplots(figsize=(10, 6))
+            # Set dark background for the plot to match our theme
+            fig1.patch.set_facecolor('#0e1117')
+            ax1.set_facecolor('#0e1117')
+            
+            sns.scatterplot(data=df, x='Date', y='Amount', hue='Status', palette=custom_colors, s=120, ax=ax1)
+            
+            # Formatting plot text color for dark mode
+            ax1.tick_params(colors='white')
+            ax1.xaxis.label.set_color('white')
+            ax1.yaxis.label.set_color('white')
+            plt.setp(ax1.get_xticklabels(), rotation=45)
+            
+            st.pyplot(fig1)
 
-    # 7. Data Table of Anomalies
-    st.subheader("🚩 Detected Anomalies List")
-    anomalies_only = df[df['Anomaly_Score'] == -1]
-    st.write(anomalies_only)
+    with col_right:
+        with st.container(border=True):
+            st.markdown("### 🍕 Budget Allocation")
+            fig2, ax2 = plt.subplots(figsize=(10, 6))
+            fig2.patch.set_facecolor('#0e1117')
+            
+            budget_dist = df.groupby('Status')['Amount'].sum()
+            # Modern Donut Chart
+            ax2.pie(budget_dist, labels=budget_dist.index, autopct='%1.1f%%', 
+                    startangle=140, colors=["#e74c3c", "#00d4ff", "#9b59b6"],
+                    wedgeprops={'width': 0.4}, textprops={'color':"w"}) 
+            
+            st.pyplot(fig2)
 
-    # 8. EXPORT AI REPORT (Fixed: Now inside the IF block)
+    # 7. Data Table of Anomalies (Inside its own Card)
+    with st.container(border=True):
+        st.subheader("🚩 Detected Anomalies List")
+        anomalies_only = df[df['Anomaly_Score'] == -1]
+        st.dataframe(anomalies_only, use_container_width=True)
+
+    # 8. EXPORT AI REPORT
     st.divider()
     st.subheader("📥 Export AI Report")
 
     @st.cache_data
     def convert_df(df_to_convert):
-        # Cache the conversion to make the app faster
         return df_to_convert.to_csv(index=False).encode('utf-8')
 
     csv_data = convert_df(anomalies_only)
@@ -90,8 +125,11 @@ if uploaded_file is not None:
         data=csv_data,
         file_name='detected_anomalies_report.csv',
         mime='text/csv',
+        type="primary" # Makes the button blue/highlighted
     )
 
 else:
-    # This message shows when the app first loads
-    st.info("Waiting for CSV upload. Please use the sidebar to upload your 'synthetic_expenses.csv' file.")
+    # Landing Page State
+    st.info("👋 Welcome! Please upload your 'synthetic_expenses.csv' file in the sidebar to begin the analysis.")
+    # Show a placeholder image or tip
+    st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=1000", caption="AI Analysis will appear here")
